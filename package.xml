@@ -8,12 +8,23 @@
   <license>TODO: License declaration</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
   <buildtool_depend>rosidl_default_generators</buildtool_depend>
 
+  <depend>easy_handeye2</depend>
   <depend>moveit_msgs</depend>
-  <depend>sensor_msgs</depend>
   <depend>moveit_ros_planning_interface</depend>
+  <depend>sensor_msgs</depend>
+  <depend>shape_msgs</depend>
+  <depend>std_msgs</depend>
   <depend>rclcpp</depend>
+  <depend>rclpy</depend>
+  <depend>realsense2_camera</depend>
+  <depend>robotiq_85_driver</depend>
+  <depend>ros2_aruco</depend>
+  <depend>tf2_ros</depend>
+  <depend>ur_moveit_config</depend>
+  <depend>ur_robot_driver</depend>
 
   <build_depend>rosidl_default_generators</build_depend>
   <exec_depend>rosidl_default_runtime</exec_depend>
