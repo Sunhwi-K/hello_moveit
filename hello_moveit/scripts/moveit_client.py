@@ -6,17 +6,18 @@ from typing import List, Optional, Tuple
 
 import rclpy
 from geometry_msgs.msg import Pose, PoseStamped
-from hello_moveit.msg import CollisionPair
-from hello_moveit.srv import (ApplyCollisionObject,
-                              ApplyCollisionObjectFromMesh, AttachHand,
-                              CheckCollision, DetachHand,
-                              PlanExecuteCartesianPath, PlanExecutePoses)
 from moveit_msgs.msg import CollisionObject, MoveItErrorCodes
 from moveit_msgs.srv import GetPositionFK, GetPositionIK
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from shape_msgs.msg import SolidPrimitive
 from std_msgs.msg import Byte, Int32
+
+from hello_moveit_msgs.msg import CollisionPair
+from hello_moveit_msgs.srv import (ApplyCollisionObject,
+                                   ApplyCollisionObjectFromMesh, AttachHand,
+                                   CheckCollision, DetachHand,
+                                   PlanExecuteCartesianPath, PlanExecutePoses)
 
 
 def apply_collision_object(

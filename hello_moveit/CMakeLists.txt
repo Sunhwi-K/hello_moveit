@@ -17,27 +17,29 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} \
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
-find_package(moveit_ros_planning_interface REQUIRED)
-find_package(moveit_visual_tools REQUIRED)
-find_package(moveit_msgs REQUIRED)
-find_package(rclcpp REQUIRED)
-find_package(rosidl_default_generators REQUIRED)
+# find_package(ament_cmake_python REQUIRED)
 
 set(THIS_PACKAGE_INCLUDE_DEPENDS
   control_msgs
   control_toolbox
+  hello_moveit_msgs
   geometry_msgs
   moveit_core
   moveit_msgs
   moveit_ros_planning
+  moveit_ros_planning_interface
+  moveit_visual_tools
   pluginlib
   rclcpp
   rclcpp_components
+  rclpy
   sensor_msgs
+  shape_msgs
   std_msgs
   std_srvs
   tf2_eigen
   trajectory_msgs
+  tf2_ros
 )
 
 foreach(Dependency IN ITEMS ${THIS_PACKAGE_INCLUDE_DEPENDS})
@@ -48,29 +50,29 @@ include_directories(
   include
 )
 
-set(msg_files
-  "msgs/msg/CollisionPair.msg"
-)
+# set(msg_files
+#   "msgs/msg/CollisionPair.msg"
+# )
 
-set(srv_files
-  "msgs/srv/ApplyCollisionObject.srv"
-  "msgs/srv/ApplyCollisionObjectFromMesh.srv"
-  "msgs/srv/AttachHand.srv"
-  "msgs/srv/CheckCollision.srv"
-  "msgs/srv/DetachHand.srv"
-  "msgs/srv/PlanExecuteCartesianPath.srv"
-  "msgs/srv/PlanExecutePoses.srv"
-)
+# set(srv_files
+#   "msgs/srv/ApplyCollisionObject.srv"
+#   "msgs/srv/ApplyCollisionObjectFromMesh.srv"
+#   "msgs/srv/AttachHand.srv"
+#   "msgs/srv/CheckCollision.srv"
+#   "msgs/srv/DetachHand.srv"
+#   "msgs/srv/PlanExecuteCartesianPath.srv"
+#   "msgs/srv/PlanExecutePoses.srv"
+# )
 
-rosidl_generate_interfaces(${PROJECT_NAME}
-  ${msg_files}
-  ${srv_files}
-  DEPENDENCIES
-  builtin_interfaces
-  moveit_msgs
-  sensor_msgs
-)
-ament_export_dependencies(rosidl_default_runtime)
+# rosidl_generate_interfaces(${PROJECT_NAME}
+#   ${msg_files}
+#   ${srv_files}
+#   DEPENDENCIES
+#   builtin_interfaces
+#   moveit_msgs
+#   sensor_msgs
+# )
+# ament_export_dependencies(rosidl_default_runtime)
 
 add_executable(moveit_sample src/hello_moveit.cpp)
 # target_include_directories(hello_moveit PUBLIC
@@ -96,6 +98,7 @@ ament_target_dependencies(
 add_executable(moveit_client src/moveit_client.cpp)
 ament_target_dependencies(
   moveit_client
+  hello_moveit_msgs
   moveit_ros_planning_interface
   moveit_visual_tools
   rclcpp
@@ -103,8 +106,8 @@ ament_target_dependencies(
   rclcpp_lifecycle
   std_msgs
 )
-rosidl_get_typesupport_target(cpp_typesupport_target  ${PROJECT_NAME} rosidl_typesupport_cpp)
-target_link_libraries(moveit_client "${cpp_typesupport_target}")
+# rosidl_get_typesupport_target(cpp_typesupport_target  ${PROJECT_NAME} rosidl_typesupport_cpp)
+# target_link_libraries(moveit_client "${cpp_typesupport_target}")
 
 # Add executable for using a controller
 set(SERVO_CONTROLLER_INPUT servo_controller_input)

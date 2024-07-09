@@ -34,7 +34,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/DetachHand.srv"
   "srv/PlanExecuteCartesianPath.srv"
   "srv/PlanExecutePoses.srv"
-  DEPENDENCIES geometry_msgs moveit_msgs sensor_msgs std_msgs
+  DEPENDENCIES builtin_interfaces geometry_msgs moveit_msgs sensor_msgs std_msgs
 )
+ament_export_dependencies(rosidl_default_runtime)
 
 ament_package()

@@ -8,14 +8,14 @@
 #include <geometric_shapes/shape_operations.h>
 #include <tf2_eigen/tf2_eigen.hpp>
 
-#include "hello_moveit/msg/collision_pair.hpp"
-#include "hello_moveit/srv/apply_collision_object.hpp"
-#include "hello_moveit/srv/apply_collision_object_from_mesh.hpp"
-#include "hello_moveit/srv/attach_hand.hpp"
-#include "hello_moveit/srv/check_collision.hpp"
-#include "hello_moveit/srv/detach_hand.hpp"
-#include "hello_moveit/srv/plan_execute_poses.hpp"
-#include "hello_moveit/srv/plan_execute_cartesian_path.hpp"
+#include <hello_moveit_msgs/msg/collision_pair.hpp>
+#include <hello_moveit_msgs/srv/apply_collision_object.hpp>
+#include <hello_moveit_msgs/srv/apply_collision_object_from_mesh.hpp>
+#include <hello_moveit_msgs/srv/attach_hand.hpp>
+#include <hello_moveit_msgs/srv/check_collision.hpp>
+#include <hello_moveit_msgs/srv/detach_hand.hpp>
+#include <hello_moveit_msgs/srv/plan_execute_poses.hpp>
+#include <hello_moveit_msgs/srv/plan_execute_cartesian_path.hpp>
 
 
 using moveit::planning_interface::MoveGroupInterface;
@@ -50,46 +50,46 @@ public:
     ik_solver_ = joint_model_group_->getSolverInstance();
 
     // start service
-    plan_execute_poses_srv_ = node_->create_service<hello_moveit::srv::PlanExecutePoses>(
+    plan_execute_poses_srv_ = node_->create_service<hello_moveit_msgs::srv::PlanExecutePoses>(
       "plan_execute_poses",
       std::bind(
         &MoveitClient::planExecutePosesCB, this, std::placeholders::_1,
         std::placeholders::_2));
 
     plan_execute_cartesian_path_srv_ =
-      node_->create_service<hello_moveit::srv::PlanExecuteCartesianPath>(
+      node_->create_service<hello_moveit_msgs::srv::PlanExecuteCartesianPath>(
       "plan_execute_cartesian_path",
       std::bind(
         &MoveitClient::planExecuteCartesianPathCB, this, std::placeholders::_1,
         std::placeholders::_2));
 
-    apply_collision_object_srv_ = node_->create_service<hello_moveit::srv::ApplyCollisionObject>(
+    apply_collision_object_srv_ = node_->create_service<hello_moveit_msgs::srv::ApplyCollisionObject>(
       "apply_collision_object",
       std::bind(
         &MoveitClient::applyCollisionObjectCB, this, std::placeholders::_1,
         std::placeholders::_2));
 
     apply_collision_object_from_mesh_srv_ =
-      node_->create_service<hello_moveit::srv::ApplyCollisionObjectFromMesh>(
+      node_->create_service<hello_moveit_msgs::srv::ApplyCollisionObjectFromMesh>(
       "apply_collision_object_from_mesh",
       std::bind(
         &MoveitClient::applyCollisionObjectFromMeshCB, this, std::placeholders::_1,
         std::placeholders::_2));
 
-    attach_hand_srv_ = node_->create_service<hello_moveit::srv::AttachHand>(
+    attach_hand_srv_ = node_->create_service<hello_moveit_msgs::srv::AttachHand>(
       "attach_hand",
       std::bind(
         &MoveitClient::attachHandCB, this, std::placeholders::_1,
         std::placeholders::_2));
 
-    check_collision_srv_ = node_->create_service<hello_moveit::srv::CheckCollision>(
+    check_collision_srv_ = node_->create_service<hello_moveit_msgs::srv::CheckCollision>(
       "check_collision",
       std::bind(
         &MoveitClient::checkCollisionCB, this, std::placeholders::_1,
         std::placeholders::_2));
 
 
-    detach_hand_srv_ = node_->create_service<hello_moveit::srv::DetachHand>(
+    detach_hand_srv_ = node_->create_service<hello_moveit_msgs::srv::DetachHand>(
       "detach_hand",
       std::bind(
         &MoveitClient::detachHandCB, this, std::placeholders::_1,
@@ -105,8 +105,8 @@ public:
   }
 
   void planExecutePosesCB(
-    const std::shared_ptr<hello_moveit::srv::PlanExecutePoses::Request> request,
-    std::shared_ptr<hello_moveit::srv::PlanExecutePoses::Response> respons)
+    const std::shared_ptr<hello_moveit_msgs::srv::PlanExecutePoses::Request> request,
+    std::shared_ptr<hello_moveit_msgs::srv::PlanExecutePoses::Response> respons)
   {
     // only execute first pose
     // until moveit pilz industrial motion planner is backported...
@@ -133,16 +133,16 @@ public:
   }
 
   void planExecuteCartesianPathCB(
-    const std::shared_ptr<hello_moveit::srv::PlanExecuteCartesianPath::Request> request,
-    std::shared_ptr<hello_moveit::srv::PlanExecuteCartesianPath::Response> respons)
+    const std::shared_ptr<hello_moveit_msgs::srv::PlanExecuteCartesianPath::Request> request,
+    std::shared_ptr<hello_moveit_msgs::srv::PlanExecuteCartesianPath::Response> respons)
   {
     move_group_.setMaxVelocityScalingFactor(request->velocity_scale);
     respons->is_success = planExecuteCartesianPath_(request->poses);
   }
 
   void applyCollisionObjectCB(
-    const std::shared_ptr<hello_moveit::srv::ApplyCollisionObject::Request> request,
-    std::shared_ptr<hello_moveit::srv::ApplyCollisionObject::Response> respons)
+    const std::shared_ptr<hello_moveit_msgs::srv::ApplyCollisionObject::Request> request,
+    std::shared_ptr<hello_moveit_msgs::srv::ApplyCollisionObject::Response> respons)
   {
     if (request->object.header.frame_id.empty()) {
       request->object.header.frame_id = move_group_.getPlanningFrame();
@@ -159,10 +159,10 @@ public:
   }
 
   void applyCollisionObjectFromMeshCB(
-    const std::shared_ptr<hello_moveit::srv::ApplyCollisionObjectFromMesh::Request> request,
-    std::shared_ptr<hello_moveit::srv::ApplyCollisionObjectFromMesh::Response> respons)
+    const std::shared_ptr<hello_moveit_msgs::srv::ApplyCollisionObjectFromMesh::Request> request,
+    std::shared_ptr<hello_moveit_msgs::srv::ApplyCollisionObjectFromMesh::Response> respons)
   {
-    auto object = loadObjectFromMesh_<hello_moveit::srv::ApplyCollisionObjectFromMesh::Request>(
+    auto object = loadObjectFromMesh_<hello_moveit_msgs::srv::ApplyCollisionObjectFromMesh::Request>(
       request);
     object.operation = request->operation;
     if (request->frame_id.empty()) {
@@ -175,11 +175,11 @@ public:
   }
 
   void attachHandCB(
-    const std::shared_ptr<hello_moveit::srv::AttachHand::Request> request,
-    std::shared_ptr<hello_moveit::srv::AttachHand::Response> respons)
+    const std::shared_ptr<hello_moveit_msgs::srv::AttachHand::Request> request,
+    std::shared_ptr<hello_moveit_msgs::srv::AttachHand::Response> respons)
   {
     // attach to planning_scene
-    auto object = loadObjectFromMesh_<hello_moveit::srv::AttachHand::Request>(request);
+    auto object = loadObjectFromMesh_<hello_moveit_msgs::srv::AttachHand::Request>(request);
     object.header.frame_id = move_group_.getEndEffectorLink();
     object.operation = object.ADD;
     moveit_msgs::msg::AttachedCollisionObject acobj;
@@ -203,8 +203,8 @@ public:
   }
 
   void checkCollisionCB(
-    const std::shared_ptr<hello_moveit::srv::CheckCollision::Request> request,
-    std::shared_ptr<hello_moveit::srv::CheckCollision::Response> respons)
+    const std::shared_ptr<hello_moveit_msgs::srv::CheckCollision::Request> request,
+    std::shared_ptr<hello_moveit_msgs::srv::CheckCollision::Response> respons)
   {
     collision_detection::CollisionRequest collision_request;
     // for checking all links attached to robot, leave group_name empty
@@ -239,7 +239,7 @@ public:
     if (collision_result.collision) {
       for (const auto & entry : collision_result.contacts) {
         const auto & key = entry.first;
-        auto collision_pair = hello_moveit::msg::CollisionPair();
+        auto collision_pair = hello_moveit_msgs::msg::CollisionPair();
         collision_pair.first = key.first;
         collision_pair.second = key.second;
         respons->collision_pairs.push_back(collision_pair);
@@ -253,8 +253,8 @@ public:
   }
 
   void detachHandCB(
-    const std::shared_ptr<hello_moveit::srv::DetachHand::Request> request,
-    std::shared_ptr<hello_moveit::srv::DetachHand::Response> respons)
+    const std::shared_ptr<hello_moveit_msgs::srv::DetachHand::Request> request,
+    std::shared_ptr<hello_moveit_msgs::srv::DetachHand::Response> respons)
   {
     if (move_group_.detachObject(request->object_id)) {
       std::vector<std::string> object_ids;
@@ -396,25 +396,25 @@ private:
   std::vector<moveit::core::VariableBounds> joint_bonds_;
   moveit::planning_interface::PlanningSceneInterface planning_scene_interface_;
 
-  rclcpp::Service<hello_moveit::srv::PlanExecutePoses>::SharedPtr
+  rclcpp::Service<hello_moveit_msgs::srv::PlanExecutePoses>::SharedPtr
     plan_execute_poses_srv_;
 
-  rclcpp::Service<hello_moveit::srv::PlanExecuteCartesianPath>::SharedPtr
+  rclcpp::Service<hello_moveit_msgs::srv::PlanExecuteCartesianPath>::SharedPtr
     plan_execute_cartesian_path_srv_;
 
-  rclcpp::Service<hello_moveit::srv::ApplyCollisionObject>::SharedPtr
+  rclcpp::Service<hello_moveit_msgs::srv::ApplyCollisionObject>::SharedPtr
     apply_collision_object_srv_;
 
-  rclcpp::Service<hello_moveit::srv::ApplyCollisionObjectFromMesh>::SharedPtr
+  rclcpp::Service<hello_moveit_msgs::srv::ApplyCollisionObjectFromMesh>::SharedPtr
     apply_collision_object_from_mesh_srv_;
 
-  rclcpp::Service<hello_moveit::srv::AttachHand>::SharedPtr
+  rclcpp::Service<hello_moveit_msgs::srv::AttachHand>::SharedPtr
     attach_hand_srv_;
 
-  rclcpp::Service<hello_moveit::srv::CheckCollision>::SharedPtr
+  rclcpp::Service<hello_moveit_msgs::srv::CheckCollision>::SharedPtr
     check_collision_srv_;
 
-  rclcpp::Service<hello_moveit::srv::DetachHand>::SharedPtr
+  rclcpp::Service<hello_moveit_msgs::srv::DetachHand>::SharedPtr
     detach_hand_srv_;
 };
 
