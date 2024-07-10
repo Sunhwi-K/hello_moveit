@@ -1,8 +1,7 @@
 """
 Sample script to run Moveit clients
 """
-import copy
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 import rclpy
 from geometry_msgs.msg import Pose, PoseStamped
@@ -59,13 +58,6 @@ def apply_collision_object(
     obj_pose.position.x = 0.3
     obj_pose.position.y = 0.0
     obj_pose.position.z = 0.5
-    # obj_pose.orientation.w = 0.5
-    # obj_pose.orientation.x = 0.5
-    # obj_pose.orientation.y = -0.5
-    # obj_pose.orientation.z = 0.5
-    # obj_pose.position.x = 1.3
-    # obj_pose.position.y = 0.85
-    # obj_pose.position.z = 0.1
     obj.primitive_poses.append(obj_pose)
     req = ApplyCollisionObject.Request()
     req.object = obj
@@ -398,61 +390,3 @@ def compute_ik(
     target_joint_state = rsp.solution.joint_state
     return target_joint_state
 
-def main() -> None:
-    """
-    Sample sequence of Moveit clients
-    """
-    rclpy.init()
-    node = rclpy.create_node('oreore')
-
-    apply_collision_object(node)
-    apply_collision_object_from_mesh(node)
-    attach_hand(node)
-    check_collision(node)
-    # set target pose1
-    msg = Pose()
-    msg.orientation.w = -0.5
-    msg.orientation.x = 0.5
-    msg.orientation.y = 0.5
-    msg.orientation.z = -0.5
-    msg.position.x = -0.696
-    msg.position.y = 0.052
-    msg.position.z = 0.464
-    node.get_logger().info(f'target tcp pose : {msg}')
-
-    # get target joint state for moving from current pose to the target pose1
-    target_joint_state = compute_ik(node, target_tcp_pose=msg)
-    node.get_logger().info(f'target joint state : {target_joint_state}')
-
-    # send target pose1
-    plan_execute_poses(node, msg)
-
-    # get current pose of tcp
-    current_tcp_pose = compute_fk(node)
-    node.get_logger().info(f'current tcp pose : {current_tcp_pose}')
-
-    # send target pose2
-    msg = Pose()
-    msg.orientation.w = -0.5
-    msg.orientation.x = 0.5
-    msg.orientation.y = 0.5
-    msg.orientation.z = -0.5
-    msg.position.x = -0.696
-    msg.position.y = 0.0519
-    msg.position.z = 0.154
-    plan_execute_poses(node, msg)
-    # send catesian path
-    waypoint1 = copy.deepcopy(msg)
-    waypoint2 = copy.deepcopy(msg)
-    waypoint1.position.y += 0.2
-    plan_execute_cartesian_path(node, [waypoint1, waypoint2])
-    # remove object
-    apply_collision_object_from_mesh(node, CollisionObject.REMOVE)
-    apply_collision_object(node, CollisionObject.REMOVE)
-    detach_hand(node)
-
-    node.destroy_node()
-    rclpy.try_shutdown()
-
-if __name__ == '__main__':
-    main()

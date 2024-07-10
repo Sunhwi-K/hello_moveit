@@ -17,7 +17,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} \
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
-# find_package(ament_cmake_python REQUIRED)
+find_package(ament_cmake_python REQUIRED)
 
 set(THIS_PACKAGE_INCLUDE_DEPENDS
   control_msgs
@@ -46,74 +46,41 @@ foreach(Dependency IN ITEMS ${THIS_PACKAGE_INCLUDE_DEPENDS})
   find_package(${Dependency} REQUIRED)
 endforeach()
 
-include_directories(
-  include
-)
+# Include Cpp "include" directory
+include_directories(include)
 
-# set(msg_files
-#   "msgs/msg/CollisionPair.msg"
-# )
-
-# set(srv_files
-#   "msgs/srv/ApplyCollisionObject.srv"
-#   "msgs/srv/ApplyCollisionObjectFromMesh.srv"
-#   "msgs/srv/AttachHand.srv"
-#   "msgs/srv/CheckCollision.srv"
-#   "msgs/srv/DetachHand.srv"
-#   "msgs/srv/PlanExecuteCartesianPath.srv"
-#   "msgs/srv/PlanExecutePoses.srv"
-# )
-
-# rosidl_generate_interfaces(${PROJECT_NAME}
-#   ${msg_files}
-#   ${srv_files}
-#   DEPENDENCIES
-#   builtin_interfaces
-#   moveit_msgs
-#   sensor_msgs
-# )
-# ament_export_dependencies(rosidl_default_runtime)
-
+# Create Cpp executables
 add_executable(moveit_sample src/hello_moveit.cpp)
-# target_include_directories(hello_moveit PUBLIC
-#   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-#   $<INSTALL_INTERFACE:include>)
-# target_compile_features(hello_moveit PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
-ament_target_dependencies(
-  moveit_sample
+ament_target_dependencies(moveit_sample
   moveit_ros_planning_interface
   moveit_visual_tools
   rclcpp
 )
 
 add_executable(hello_ur src/hello_ur.cpp)
-ament_target_dependencies(
-  hello_ur
+ament_target_dependencies(hello_ur
   moveit_ros_planning_interface
   moveit_visual_tools
   rclcpp
 )
 
-
 add_executable(moveit_client src/moveit_client.cpp)
-ament_target_dependencies(
-  moveit_client
+ament_target_dependencies(moveit_client
   hello_moveit_msgs
+  lifecycle_msgs
   moveit_ros_planning_interface
   moveit_visual_tools
   rclcpp
-  lifecycle_msgs
   rclcpp_lifecycle
   std_msgs
 )
-# rosidl_get_typesupport_target(cpp_typesupport_target  ${PROJECT_NAME} rosidl_typesupport_cpp)
-# target_link_libraries(moveit_client "${cpp_typesupport_target}")
 
 # Add executable for using a controller
 set(SERVO_CONTROLLER_INPUT servo_controller_input)
 add_library(${SERVO_CONTROLLER_INPUT} SHARED src/teleop_demo/joystick_servo_example.cpp)
 ament_target_dependencies(${SERVO_CONTROLLER_INPUT} ${THIS_PACKAGE_INCLUDE_DEPENDS})
 rclcpp_components_register_nodes(${SERVO_CONTROLLER_INPUT} "moveit_servo::JoyToServoPub")
+
 # Install Libraries
 install(
   TARGETS
@@ -125,13 +92,28 @@ install(
   INCLUDES DESTINATION include
 )
 
+# Install Cpp executables
 install(TARGETS
   moveit_sample
   hello_ur
   moveit_client
   DESTINATION lib/${PROJECT_NAME})
 
-install(DIRECTORY launch rviz config cad
+# Install Python modules
+ament_python_install_package(${PROJECT_NAME})
+
+# Install Python executables
+install(PROGRAMS
+  scripts/moveit_client_main.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+# Install data files which are included in package
+install(DIRECTORY 
+  launch
+  rviz
+  config
+  cad
   DESTINATION share/${PROJECT_NAME}
 )
 
