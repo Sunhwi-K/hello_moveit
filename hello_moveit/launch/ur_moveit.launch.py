@@ -278,7 +278,7 @@ def launch_setup(context, *args, **kwargs):
             'camera_name': 'hand_camera',
             'pointcloud.enable': 'true',
             'serial_no': '_128422272064',
-            'depth_module.profile': '1280x720x30',
+            'depth_module.profile': '848x480x10',
             'align_depth.enable': 'true'
         }.items(),
         condition=IfCondition(
