@@ -464,6 +464,7 @@ def generate_launch_description():
     declared_arguments.append(
         DeclareLaunchArgument(
             "ur_type",
+            default_value='ur5e',
             description="Type/series of used UR robot.",
             choices=["ur3", "ur3e", "ur5", "ur5e", "ur10", "ur10e", "ur16e", "ur20"],
         ))
@@ -473,6 +474,7 @@ def generate_launch_description():
             default_value="false",
             description=
             "Indicate whether robot is running with fake hardware mirroring command to its states.",
+            choices=['true', 'false'],
         ))
     declared_arguments.append(
         DeclareLaunchArgument(
@@ -569,14 +571,16 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "use_base_camera",
             default_value="false",
-            description="Launch eye on base camera?"
+            description="Launch eye on base camera?",
+            choices=['true', 'false'],
         ))
     # hand
     declared_arguments.append(
         DeclareLaunchArgument(
             "hand",
-            default_value='""',
-            description="hand type"
+            default_value="''",
+            description="hand type",
+            choices=['robotiq-2f-140', "''"],
         ))
     # aruco marker
     declared_arguments.append(
