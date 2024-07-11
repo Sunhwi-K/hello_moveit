@@ -34,19 +34,17 @@ import os
 import re
 from typing import Union
 
+from launch import LaunchDescription
 from launch.actions import (DeclareLaunchArgument, GroupAction,
                             IncludeLaunchDescription, OpaqueFunction,
-                            RegisterEventHandler, TimerAction)
+                            TimerAction)
 from launch.conditions import IfCondition
-from launch.event_handlers import OnExecutionComplete, OnProcessStart
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import (Command, FindExecutable, LaunchConfiguration,
                                   PathJoinSubstitution, PythonExpression)
 from launch_ros.actions import Node, PushRosNamespace
 from launch_ros.substitutions import FindPackageShare
 from ur_moveit_config.launch_common import load_yaml
-
-from launch import LaunchDescription
 
 
 def launch_setup(context, *args, **kwargs):
@@ -68,8 +66,8 @@ def launch_setup(context, *args, **kwargs):
     prefix = LaunchConfiguration("prefix")
     use_sim_time = LaunchConfiguration("use_sim_time")
     launch_rviz = LaunchConfiguration("launch_rviz")
-    use_realsense = LaunchConfiguration('use_realsense')
     calibration_type = LaunchConfiguration('calibration_type')
+    use_base_camera = LaunchConfiguration('use_base_camera')
 
     hand = LaunchConfiguration('hand')
     # Enable use_tool_communication when the robotiq gripper is selected
@@ -284,11 +282,12 @@ def launch_setup(context, *args, **kwargs):
             'align_depth.enable': 'true'
         }.items(),
         condition=IfCondition(
-                    PythonExpression([
-                    str(context.perform_substitution(calibration_type) == 'eye_in_hand'),
-                    ' or ',
-                    use_realsense
-                ])),
+            PythonExpression([
+                str(context.perform_substitution(calibration_type) == 'eye_in_hand'),
+                ' or ',
+                str(context.perform_substitution(use_fake_hardware) == 'false')
+            ])
+        ),
     )
     nodes_to_start.append(launch_hand_realsense2_camera)
 
@@ -306,18 +305,23 @@ def launch_setup(context, *args, **kwargs):
             'align_depth.enable': 'true'
         }.items(),
         condition=IfCondition(
-                    PythonExpression([
-                    str(context.perform_substitution(calibration_type) == 'eye_on_base'),
-                    ' or ',
-                    use_realsense
-                ])),
+            PythonExpression([
+                str(context.perform_substitution(calibration_type) == 'eye_on_base'),
+                ' or ',
+                str(context.perform_substitution(use_fake_hardware) == 'false'),
+                ' and ',
+                str(context.perform_substitution(use_base_camera) == 'true')
+            ])
+        ),
     )
     nodes_to_start.append(launch_base_realsense2_camera)
 
     ## include aruco recognition
-    launch_aruco_recognition = IncludeLaunchDescription(PythonLaunchDescriptionSource([
-        PathJoinSubstitution(
-            [FindPackageShare('ros2_aruco'), 'launch', 'aruco_recognition.launch.py'])
+    launch_aruco_recognition = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('ros2_aruco'), 'launch', 'aruco_recognition.launch.py'
+            ])
         ]),
         launch_arguments={
             'marker_size': context.perform_substitution(marker_size),
@@ -328,69 +332,91 @@ def launch_setup(context, *args, **kwargs):
             'marker_id_list': marker_id_list,
         }.items(),
         condition=IfCondition(
-                    PythonExpression([
-                    str(context.perform_substitution(calibration_type) != ''),
-                    ' or ',
-                    use_realsense
-                    ])
-                ),
+            PythonExpression([
+                str(context.perform_substitution(calibration_type) != '')
+            ])
+        ),
     )
     nodes_to_start.append(launch_aruco_recognition)
 
     ## include easy_handeye2
     # use the marker at index 0 in the marker_id_list to perform handeye calibration
     calibration_marker = ast.literal_eval(context.perform_substitution(marker_id_list))[0]
-    launch_easy_handeye2 = IncludeLaunchDescription(PythonLaunchDescriptionSource([
-        PathJoinSubstitution([FindPackageShare('easy_handeye2'), 'launch', 'calibrate.launch.py'])
-    ]),
-                                                    launch_arguments={
-                                                        'calibration_type': context.perform_substitution(calibration_type),
-                                                        'tracking_base_frame': context.perform_substitution(tracking_base_frame),
-                                                        'tracking_marker_frame': f'aruco_marker_{calibration_marker}',
-                                                        'robot_base_frame': 'base_link',
-                                                        'robot_effector_frame': 'tool0',
-                                                        'name': f'easy_handeye2_{context.perform_substitution(calibration_type)}',
-                                                    }.items(),
-                                                    condition=IfCondition(str(context.perform_substitution(calibration_type) != '')))
+    launch_easy_handeye2 = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('easy_handeye2'), 'launch', 'calibrate.launch.py'
+            ])
+        ]),
+        launch_arguments={
+            'calibration_type': context.perform_substitution(calibration_type),
+            'tracking_base_frame': context.perform_substitution(tracking_base_frame),
+            'tracking_marker_frame': f'aruco_marker_{calibration_marker}',
+            'robot_base_frame': 'base_link',
+            'robot_effector_frame': 'tool0',
+            'name': f'easy_handeye2_{context.perform_substitution(calibration_type)}',
+        }.items(),
+        condition=IfCondition(
+            PythonExpression([
+                str(context.perform_substitution(calibration_type) != '')
+            ])
+        )
+    )
     easy_handeye2_delay = TimerAction(period=5.0, actions=[launch_easy_handeye2])
     nodes_to_start.append(easy_handeye2_delay)
 
     # static transform publisher
     # hand camera
     calibration_yaml = load_yaml("hello_moveit", "config/easy_handeye2_eye_in_hand.calib")
-    hand_camera_tf_node = Node(package='tf2_ros', executable='static_transform_publisher', name='hand_camera_tf_publisher',
-                          condition=IfCondition(PythonExpression(['not ', str(calibration_type == 'eye_in_hand'), ' and ', use_realsense])),
-                          arguments=[
-                              "--x", str(calibration_yaml["transform"]["translation"]["x"]),
-                              "--y", str(calibration_yaml["transform"]["translation"]["y"]),
-                              "--z", str(calibration_yaml["transform"]["translation"]["z"]),
-                              "--qx", str(calibration_yaml["transform"]["rotation"]["x"]),
-                              "--qy", str(calibration_yaml["transform"]["rotation"]["y"]),
-                              "--qz", str(calibration_yaml["transform"]["rotation"]["z"]),
-                              "--qw", str(calibration_yaml["transform"]["rotation"]["w"]),
-                              "--frame-id", calibration_yaml["parameters"]["robot_effector_frame"],
-                              "--child-frame-id", calibration_yaml["parameters"]["tracking_base_frame"],
-                            ],
-                         )
+    hand_camera_tf_node = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='hand_camera_tf_publisher',
+        arguments=[
+            "--x", str(calibration_yaml["transform"]["translation"]["x"]),
+            "--y", str(calibration_yaml["transform"]["translation"]["y"]),
+            "--z", str(calibration_yaml["transform"]["translation"]["z"]),
+            "--qx", str(calibration_yaml["transform"]["rotation"]["x"]),
+            "--qy", str(calibration_yaml["transform"]["rotation"]["y"]),
+            "--qz", str(calibration_yaml["transform"]["rotation"]["z"]),
+            "--qw", str(calibration_yaml["transform"]["rotation"]["w"]),
+            "--frame-id", calibration_yaml["parameters"]["robot_effector_frame"],
+            "--child-frame-id", calibration_yaml["parameters"]["tracking_base_frame"],
+        ],
+        condition=IfCondition(
+            PythonExpression([
+                str(context.perform_substitution(calibration_type) != 'eye_in_hand'),
+            ])
+        ),
+    )
     hand_camera_tf_node_delay = TimerAction(period=5.0, actions=[hand_camera_tf_node])
     nodes_to_start.append(hand_camera_tf_node_delay)
 
     # base camera
     calibration_yaml = load_yaml("hello_moveit", "config/easy_handeye2_eye_on_base.calib")
-    base_camera_tf_node = Node(package='tf2_ros', executable='static_transform_publisher', name='base_camera_tf_publisher',
-                          condition=IfCondition(PythonExpression(['not ', str(calibration_type == 'eye_on_base'), ' and ', use_realsense])),
-                          arguments=[
-                              "--x", str(calibration_yaml["transform"]["translation"]["x"]),
-                              "--y", str(calibration_yaml["transform"]["translation"]["y"]),
-                              "--z", str(calibration_yaml["transform"]["translation"]["z"]),
-                              "--qx", str(calibration_yaml["transform"]["rotation"]["x"]),
-                              "--qy", str(calibration_yaml["transform"]["rotation"]["y"]),
-                              "--qz", str(calibration_yaml["transform"]["rotation"]["z"]),
-                              "--qw", str(calibration_yaml["transform"]["rotation"]["w"]),
-                              "--frame-id", calibration_yaml["parameters"]["robot_base_frame"],
-                              "--child-frame-id", calibration_yaml["parameters"]["tracking_base_frame"],
-                            ],
-                         )
+    base_camera_tf_node = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='base_camera_tf_publisher',
+        arguments=[
+            "--x", str(calibration_yaml["transform"]["translation"]["x"]),
+            "--y", str(calibration_yaml["transform"]["translation"]["y"]),
+            "--z", str(calibration_yaml["transform"]["translation"]["z"]),
+            "--qx", str(calibration_yaml["transform"]["rotation"]["x"]),
+            "--qy", str(calibration_yaml["transform"]["rotation"]["y"]),
+            "--qz", str(calibration_yaml["transform"]["rotation"]["z"]),
+            "--qw", str(calibration_yaml["transform"]["rotation"]["w"]),
+            "--frame-id", calibration_yaml["parameters"]["robot_base_frame"],
+            "--child-frame-id", calibration_yaml["parameters"]["tracking_base_frame"],
+        ],
+        condition=IfCondition(
+            PythonExpression([
+                str(context.perform_substitution(calibration_type) != 'eye_on_base'),
+                ' and ',
+                str(context.perform_substitution(use_base_camera) == 'true')
+            ])
+        ),
+    )
     base_camera_tf_node_delay = TimerAction(period=5.0, actions=[base_camera_tf_node])
     nodes_to_start.append(base_camera_tf_node_delay)
 
@@ -408,17 +434,24 @@ def launch_setup(context, *args, **kwargs):
     )
     nodes_to_start.append(tool_communication_node)
 
-    launch_robotiq_gripper = GroupAction(actions=[
-        PushRosNamespace('gripper'),
-        IncludeLaunchDescription(PythonLaunchDescriptionSource(
-        [PathJoinSubstitution([FindPackageShare('robotiq_85_driver'), 'launch', 'gripper_driver.launch.py'])]),
-                                                      launch_arguments={
-                                                          'stroke': '0.140',
-                                                          'comport': '/tmp/ttyUR',
-                                                          'baud': '115200',
-                                                      }.items(),
-                                                      condition=IfCondition(use_robotiq_gripper),
-                                                    )])
+    launch_robotiq_gripper = GroupAction(
+        actions=[
+            PushRosNamespace('gripper'),
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource([
+                    PathJoinSubstitution([
+                        FindPackageShare('robotiq_85_driver'), 'launch', 'gripper_driver.launch.py'
+                    ])
+                ]),
+                launch_arguments={
+                    'stroke': '0.140',
+                    'comport': '/tmp/ttyUR',
+                    'baud': '115200',
+                }.items(),
+                condition=IfCondition(use_robotiq_gripper),
+            )
+        ]
+    )
     nodes_to_start.append(launch_robotiq_gripper)
 
     return nodes_to_start
@@ -510,7 +543,7 @@ def generate_launch_description():
             "use_sim_time",
             default_value="false",
             description=
-            "Make MoveIt to use simulation time. This is needed for the trajectory planing in simulation.",
+            "Make MoveIt to use simulation time. This is needed for the trajectory planing in simulation."
         ))
     declared_arguments.append(
         DeclareLaunchArgument(
@@ -518,55 +551,63 @@ def generate_launch_description():
             default_value='""',
             description="Prefix of the joint names, useful for \
         multi-robot setup. If changed than also joint names in the controllers' configuration \
-        have to be updated."                            ,
+        have to be updated."
         ))
     declared_arguments.append(
-        DeclareLaunchArgument("launch_rviz", default_value="true", description="Launch RViz?"))
+        DeclareLaunchArgument(
+            "launch_rviz",
+            default_value="true",
+            description="Launch RViz?"
+        ))
     declared_arguments.append(
-        DeclareLaunchArgument("calibration_type",
-                              default_value="",
-                              description="easy_handeye2_calibration calibration type"))
+        DeclareLaunchArgument(
+            "calibration_type",
+            default_value="",
+            description="easy_handeye2_calibration calibration type"
+        ))
     declared_arguments.append(
-        DeclareLaunchArgument("use_realsense",
-                              default_value="False",
-                              description="Launch ros2_aruco and realsense2?"))
+        DeclareLaunchArgument(
+            "use_base_camera",
+            default_value="false",
+            description="Launch eye on base camera?"
+        ))
     # hand
     declared_arguments.append(
         DeclareLaunchArgument(
             "hand",
             default_value='""',
-            description="hand type",
+            description="hand type"
         ))
     # aruco marker
     declared_arguments.append(
         DeclareLaunchArgument(
             "marker_size",
             default_value='0.050',
-            description="aruco marker size.",
+            description="aruco marker size."
         ))
     declared_arguments.append(
         DeclareLaunchArgument(
             "image_topic",
             description="image topic name.",
-            default_value='/camera/color/image_rect_raw',
+            default_value='/camera/color/image_rect_raw'
         ))
     declared_arguments.append(
         DeclareLaunchArgument(
             "camera_info_topic",
             description="camera info topic name.",
-            default_value='/camera/color/camera_info',
+            default_value='/camera/color/camera_info'
         ))
     declared_arguments.append(
         DeclareLaunchArgument(
             "tracking_base_frame",
             description=".",
-            default_value='camera_color_optical_frame',
+            default_value='camera_color_optical_frame'
         ))
     declared_arguments.append(
         DeclareLaunchArgument(
             "marker_id_list",
             description="list of marker IDs to be detected.",
-            default_value='[0, 1, 2, 3]',
+            default_value='[0, 1, 2, 3]'
         ))
 
     return LaunchDescription(declared_arguments + [OpaqueFunction(function=launch_setup)])
