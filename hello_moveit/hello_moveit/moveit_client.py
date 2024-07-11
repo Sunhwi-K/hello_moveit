@@ -101,9 +101,9 @@ def apply_collision_object_from_mesh(
     obj_pose.orientation.x = 0.0
     obj_pose.orientation.y = 0.0
     obj_pose.orientation.z = 0.0
-    obj_pose.position.x = -0.70932
-    obj_pose.position.y = 0.43848
-    obj_pose.position.z = -0.83605
+    obj_pose.position.x = -0.72932
+    obj_pose.position.y = 0.45848
+    obj_pose.position.z = -0.81605
     req.pose = obj_pose
     req.operation = operation
 
