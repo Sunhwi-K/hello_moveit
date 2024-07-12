@@ -142,7 +142,7 @@ def attach_hand(node: Node) -> bool:
     grab_pose.orientation.w = 1.0
     grab_pose.position.z = 0.0
     req.pose = grab_pose
-    req.touch_links = ['wrist_3_link']
+    req.touch_links = ['tool0']
 
     while not attach_hand_cli.wait_for_service(timeout_sec=1.0):
         node.get_logger().info('attach hand service not ready, sleep 1sec')
