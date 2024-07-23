@@ -240,7 +240,7 @@ def plan_execute_poses(
     """
     plan_execute_poses_cli = node.create_client(PlanExecutePoses, 'plan_execute_poses')
     req = PlanExecutePoses.Request()
-    req.velocity_scale = 1.0  # you can chage this to slow down robot
+    req.velocity_scale = 0.2  # you can chage this to slow down robot
     req.poses = [pose]
 
     while not plan_execute_poses_cli.wait_for_service(timeout_sec=1.0):
@@ -276,7 +276,7 @@ def plan_execute_cartesian_path(
     plan_execute_cartesian_cli = node.create_client(PlanExecuteCartesianPath,
                                                     'plan_execute_cartesian_path')
     req = PlanExecuteCartesianPath.Request()
-    req.velocity_scale = 1.0  # you can chage this to slow down robot
+    req.velocity_scale = 0.2  # you can chage this to slow down robot
     req.poses = poses
 
     while not plan_execute_cartesian_cli.wait_for_service(timeout_sec=1.0):

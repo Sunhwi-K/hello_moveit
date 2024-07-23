@@ -124,6 +124,7 @@ public:
     }
 
     move_group_.setMaxVelocityScalingFactor(request->velocity_scale);
+    move_group_.setMaxAccelerationScalingFactor(request->velocity_scale);
     findClosestSolution_(seed_state, solution);
     for (size_t i = 0; i < solution.size(); ++i) {
       RCLCPP_INFO_STREAM(logger_, "q[" << i << "]=" << solution[i]);
@@ -137,6 +138,7 @@ public:
     std::shared_ptr<hello_moveit_msgs::srv::PlanExecuteCartesianPath::Response> respons)
   {
     move_group_.setMaxVelocityScalingFactor(request->velocity_scale);
+    move_group_.setMaxAccelerationScalingFactor(request->velocity_scale);
     respons->is_success = planExecuteCartesianPath_(request->poses);
   }
 
