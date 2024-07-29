@@ -1,6 +1,7 @@
 geometry_msgs/Pose[] poses
 geometry_msgs/Pose offset
 float32 velocity_scale
+float32 acceleration_scale
 bool verbose
 ---
 moveit_msgs/MoveItErrorCodes err_code
