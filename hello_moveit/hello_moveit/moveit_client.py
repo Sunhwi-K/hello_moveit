@@ -222,7 +222,8 @@ def detach_hand(node: Node) -> bool:
 
 def plan_execute_poses(
         node: Node,
-        pose: Pose) -> Int32:
+        pose: Pose,
+        verbose: bool = False) -> Int32:
     """
     ROS service client for planning to achieve the target pose of tcp
 
@@ -242,6 +243,7 @@ def plan_execute_poses(
     req = PlanExecutePoses.Request()
     req.velocity_scale = 0.2  # you can chage this to slow down robot
     req.poses = [pose]
+    req.verbose = verbose
 
     while not plan_execute_poses_cli.wait_for_service(timeout_sec=1.0):
         node.get_logger().info('service not ready, sleep 1sec')

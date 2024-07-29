@@ -132,7 +132,7 @@ public:
     for (size_t i = 0; i < solution.size(); ++i) {
       RCLCPP_INFO_STREAM(logger_, "q[" << i << "]=" << solution[i]);
     }
-    respons->err_code = planExecuteJointValue_(solution, 30);
+    respons->err_code = planExecuteJointValue_(solution, 30, request->verbose);
     RCLCPP_INFO(logger_, "service is retrun");
   }
 
@@ -326,7 +326,8 @@ private:
 
   moveit::core::MoveItErrorCode planExecuteJointValue_(
     const std::vector<double> & q,
-    const int retry)
+    const int retry,
+    bool verbose = false)
   {
     move_group_.setJointValueTarget(q);
     moveit::planning_interface::MoveGroupInterface::Plan plan;
@@ -336,31 +337,33 @@ private:
       for (int i = retry; i > 0; i--) {
         err = move_group_.plan(plan);
         if (err.val == moveit::core::MoveItErrorCode::SUCCESS) {
-          // Convert from moveit_msgs::msg::RobotTrajectory to robot_trajectory::RobotTrajectory
-          moveit::core::RobotModelConstPtr rm = move_group_.getRobotModel();
-          moveit::core::RobotState rs(rm);
-          robot_trajectory::RobotTrajectory rt(rm, joint_model_group_);
-          rt.setRobotTrajectoryMsg(rs, plan.trajectory_);
-          // Get the length of the planned path
-          double planned_path_length = robot_trajectory::path_length(rt);
-          double planning_time = plan.planning_time_;
-          std::cout << "Path length: " << planned_path_length << "[rad]" << std::endl;
-          std::cout << "Planning time: " << planning_time << "[s]" << std::endl;
+          if (verbose) {
+            // Convert from moveit_msgs::msg::RobotTrajectory to robot_trajectory::RobotTrajectory
+            moveit::core::RobotModelConstPtr rm = move_group_.getRobotModel();
+            moveit::core::RobotState rs(rm);
+            robot_trajectory::RobotTrajectory rt(rm, joint_model_group_);
+            rt.setRobotTrajectoryMsg(rs, plan.trajectory_);
+            // Get the length of the planned path
+            double planned_path_length = robot_trajectory::path_length(rt);
+            double planning_time = plan.planning_time_;
+            std::cout << "Path length: " << planned_path_length << "[rad]" << std::endl;
+            std::cout << "Planning time: " << planning_time << "[s]" << std::endl;
 
-          // Get the parent link of the end effector
-          const moveit::core::LinkModel* ee_parent_link;
-          const std::vector<const moveit::core::LinkModel*> & link_models = joint_model_group_->getLinkModels();
-          for (const moveit::core::LinkModel* link_model : link_models) {
-            if (link_model->getName() == "wrist_3_link") {
-              ee_parent_link = link_model;
+            // Get the parent link of the end effector
+            const moveit::core::LinkModel* ee_parent_link;
+            const std::vector<const moveit::core::LinkModel*> & link_models = joint_model_group_->getLinkModels();
+            for (const moveit::core::LinkModel* link_model : link_models) {
+              if (link_model->getName() == "wrist_3_link") {
+                ee_parent_link = link_model;
+              }
             }
+            // Visualize the planned path of the end effector
+            bool vis_err = visual_tools_.publishTrajectoryLine(rt, ee_parent_link);
+            if (!vis_err) {
+              RCLCPP_ERROR_STREAM(logger_, "visual_tools error");
+            }
+            visual_tools_.trigger();
           }
-          // Visualize the planned path of the end effector
-          bool vis_err = visual_tools_.publishTrajectoryLine(rt, ee_parent_link);
-          if (!vis_err) {
-            RCLCPP_ERROR_STREAM(logger_, "visual_tools error");
-          }
-          visual_tools_.trigger();
 
           //
           char input;
