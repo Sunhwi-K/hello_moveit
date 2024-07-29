@@ -389,6 +389,19 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /curobo/final_robot_spheres
       Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: EEPlannedPath
+      Namespaces:
+        "": true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /ee_planned_path
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48

@@ -2,6 +2,7 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include <moveit/move_group_interface/move_group_interface.h>
+#include <moveit/robot_state/robot_state.h>
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
 #include <moveit_visual_tools/moveit_visual_tools.h>
 #include <moveit_msgs/msg/collision_object.h>
@@ -19,6 +20,7 @@
 
 
 using moveit::planning_interface::MoveGroupInterface;
+namespace rvt = rviz_visual_tools;
 
 class MoveitClient
 {
@@ -27,9 +29,10 @@ public:
     const std::string arm_group,
     std::shared_ptr<rclcpp::Node> node,
     MoveGroupInterface & move_group,
-    planning_scene::PlanningScene & planning_scene)
+    planning_scene::PlanningScene & planning_scene,
+    moveit_visual_tools::MoveItVisualTools visual_tools)
   : arm_group_(arm_group), node_(node), move_group_(move_group), planning_scene_(planning_scene),
-    logger_(node->get_logger()) {}
+    logger_(node->get_logger()), visual_tools_(visual_tools) {}
 
   void initServer()
   {
@@ -333,6 +336,33 @@ private:
       for (int i = retry; i > 0; i--) {
         err = move_group_.plan(plan);
         if (err.val == moveit::core::MoveItErrorCode::SUCCESS) {
+          // Convert from moveit_msgs::msg::RobotTrajectory to robot_trajectory::RobotTrajectory
+          moveit::core::RobotModelConstPtr rm = move_group_.getRobotModel();
+          moveit::core::RobotState rs(rm);
+          robot_trajectory::RobotTrajectory rt(rm, joint_model_group_);
+          rt.setRobotTrajectoryMsg(rs, plan.trajectory_);
+          // Get the length of the planned path
+          double planned_path_length = robot_trajectory::path_length(rt);
+          double planning_time = plan.planning_time_;
+          std::cout << "Path length: " << planned_path_length << "[rad]" << std::endl;
+          std::cout << "Planning time: " << planning_time << "[s]" << std::endl;
+
+          // Get the parent link of the end effector
+          const moveit::core::LinkModel* ee_parent_link;
+          const std::vector<const moveit::core::LinkModel*> & link_models = joint_model_group_->getLinkModels();
+          for (const moveit::core::LinkModel* link_model : link_models) {
+            if (link_model->getName() == "wrist_3_link") {
+              ee_parent_link = link_model;
+            }
+          }
+          // Visualize the planned path of the end effector
+          bool vis_err = visual_tools_.publishTrajectoryLine(rt, ee_parent_link);
+          if (!vis_err) {
+            RCLCPP_ERROR_STREAM(logger_, "visual_tools error");
+          }
+          visual_tools_.trigger();
+
+          //
           char input;
           std::cout << "Were you admitted? [y/n]" << std::endl;
           std::cin >> input;
@@ -392,6 +422,7 @@ private:
   MoveGroupInterface & move_group_;
   planning_scene::PlanningScene & planning_scene_;
   rclcpp::Logger logger_;
+  moveit_visual_tools::MoveItVisualTools visual_tools_;
   kinematics::KinematicsBaseConstPtr ik_solver_;
   moveit::core::RobotStatePtr current_state_;
   const moveit::core::JointModelGroup * joint_model_group_;
@@ -443,8 +474,14 @@ int main(int argc, char * argv[])
   robot_model_loader::RobotModelLoader robot_model_loader(node);
   const moveit::core::RobotModelPtr & kinematic_model = robot_model_loader.getModel();
   planning_scene::PlanningScene planning_scene(kinematic_model);
+  
+  moveit::core::RobotModelConstPtr rm = move_group.getRobotModel();
+  moveit_visual_tools::MoveItVisualTools visual_tools(node, "base_link", "/ee_planned_path", rm);
+  visual_tools.enableBatchPublishing();
+  visual_tools.deleteAllMarkers();
+  visual_tools.loadRemoteControl();
 
-  MoveitClient mc(kARM_GROUP, node, move_group, planning_scene);
+  MoveitClient mc(kARM_GROUP, node, move_group, planning_scene, visual_tools);
   mc.initServer();
 
   // wait until SIGTERM
