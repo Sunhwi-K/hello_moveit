@@ -223,6 +223,7 @@ def detach_hand(node: Node) -> bool:
 def plan_execute_poses(
         node: Node,
         pose: Pose,
+        num_planning_attempts: int = 1,
         verbose: bool = False) -> Int32:
     """
     ROS service client for planning to achieve the target pose of tcp
@@ -239,10 +240,15 @@ def plan_execute_poses(
     ret_code: Int32
         Result of calling ROS service
     """
+    if num_planning_attempts < 1:
+        node.get_logger().error('num_planning_attempts must be greater than 0')
+        return MoveItErrorCodes.FAILURE
+
     plan_execute_poses_cli = node.create_client(PlanExecutePoses, 'plan_execute_poses')
     req = PlanExecutePoses.Request()
     req.velocity_scale = 0.2  # you can chage this to slow down robot
     req.acceleration_scale = 0.2  # you can chage this to slow down robot
+    req.num_planning_attempts = num_planning_attempts
     req.poses = [pose]
     req.verbose = verbose
 

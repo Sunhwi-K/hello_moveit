@@ -18,8 +18,13 @@
 #include <hello_moveit_msgs/srv/plan_execute_poses.hpp>
 #include <hello_moveit_msgs/srv/plan_execute_cartesian_path.hpp>
 
+#include <fstream>
+#include <sstream>
+#include <chrono>
+
 
 using moveit::planning_interface::MoveGroupInterface;
+using namespace std::chrono_literals;
 namespace rvt = rviz_visual_tools;
 
 class MoveitClient
@@ -30,9 +35,10 @@ public:
     std::shared_ptr<rclcpp::Node> node,
     MoveGroupInterface & move_group,
     planning_scene::PlanningScene & planning_scene,
-    moveit_visual_tools::MoveItVisualTools visual_tools)
+    moveit_visual_tools::MoveItVisualTools visual_tools,
+    std::ofstream & log_file)
   : arm_group_(arm_group), node_(node), move_group_(move_group), planning_scene_(planning_scene),
-    logger_(node->get_logger()), visual_tools_(visual_tools) {}
+    logger_(node->get_logger()), visual_tools_(visual_tools), log_file_(log_file) {}
 
   void initServer()
   {
@@ -128,11 +134,12 @@ public:
 
     move_group_.setMaxVelocityScalingFactor(request->velocity_scale);
     move_group_.setMaxAccelerationScalingFactor(request->acceleration_scale);
+    move_group_.setNumPlanningAttempts(request->num_planning_attempts);
     findClosestSolution_(seed_state, solution);
     for (size_t i = 0; i < solution.size(); ++i) {
       RCLCPP_INFO_STREAM(logger_, "q[" << i << "]=" << solution[i]);
     }
-    respons->err_code = planExecuteJointValue_(solution, 30, request->verbose);
+    respons->err_code = planExecuteJointValue_(solution, 1, request->verbose);
     RCLCPP_INFO(logger_, "service is retrun");
   }
 
@@ -176,6 +183,7 @@ public:
       object.header.frame_id = request->frame_id;
     }
 
+    rclcpp::sleep_for(500ms);
     respons->is_success = planning_scene_interface_.applyCollisionObject(object);
   }
 
@@ -346,8 +354,9 @@ private:
             // Get the length of the planned path
             double planned_path_length = robot_trajectory::path_length(rt);
             double planning_time = plan.planning_time_;
-            std::cout << "Path length: " << planned_path_length << "[rad]" << std::endl;
-            std::cout << "Planning time: " << planning_time << "[s]" << std::endl;
+            std::cout << "Path length: " << planned_path_length << "(rad)" << std::endl;
+            std::cout << "Planning time: " << planning_time << "(sec)" << std::endl;
+            log_file_ << planned_path_length << ',' << planning_time << std::endl;
 
             // Get the parent link of the end effector
             const moveit::core::LinkModel* ee_parent_link;
@@ -358,6 +367,7 @@ private:
               }
             }
             // Visualize the planned path of the end effector
+            // visual_tools_.deleteAllMarkers();
             bool vis_err = visual_tools_.publishTrajectoryLine(rt, ee_parent_link);
             if (!vis_err) {
               RCLCPP_ERROR_STREAM(logger_, "visual_tools error");
@@ -366,15 +376,15 @@ private:
           }
 
           //
-          char input;
-          std::cout << "Were you admitted? [y/n]" << std::endl;
-          std::cin >> input;
-          if (input == 'y') {
-            {
+          // char input;
+          // std::cout << "Were you admitted? [y/n]" << std::endl;
+          // std::cin >> input;
+          // if (input == 'y') {
+          //   {
               move_group_.execute(plan);
               return;
-            }
-          }
+          //   }
+          // }
         }
         RCLCPP_WARN_STREAM(logger_, "try to replan");
       }
@@ -402,15 +412,15 @@ private:
             waypoints, kEEF_STEP, kJUMP_THRESHOLD,
             trajectory, kAVOID_COLLISION) > kSUCCESS_RATE)
         {
-          char input;
-          std::cout << "Were you admitted? [y/n]" << std::endl;
-          std::cin >> input;
-          if (input == 'y') {
-            {
+          // char input;
+          // std::cout << "Were you admitted? [y/n]" << std::endl;
+          // std::cin >> input;
+          // if (input == 'y') {
+          //   {
               move_group_.execute(trajectory);
               return;
-            }
-          }
+          //   }
+          // }
         }
         RCLCPP_WARN_STREAM(logger_, "try to replan");
       }
@@ -431,6 +441,7 @@ private:
   const moveit::core::JointModelGroup * joint_model_group_;
   std::vector<moveit::core::VariableBounds> joint_bonds_;
   moveit::planning_interface::PlanningSceneInterface planning_scene_interface_;
+  std::ofstream & log_file_;
 
   rclcpp::Service<hello_moveit_msgs::srv::PlanExecutePoses>::SharedPtr
     plan_execute_poses_srv_;
@@ -484,7 +495,10 @@ int main(int argc, char * argv[])
   visual_tools.deleteAllMarkers();
   visual_tools.loadRemoteControl();
 
-  MoveitClient mc(kARM_GROUP, node, move_group, planning_scene, visual_tools);
+  std::ofstream log_file(std::string("/tmp/moveit_client_log.csv"));
+  log_file << "pathLength(rad)" << ',' << "planningTime(sec)" << std::endl;
+
+  MoveitClient mc(kARM_GROUP, node, move_group, planning_scene, visual_tools, log_file);
   mc.initServer();
 
   // wait until SIGTERM
