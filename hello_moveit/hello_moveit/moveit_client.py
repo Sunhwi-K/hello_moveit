@@ -93,7 +93,7 @@ def apply_collision_object_from_mesh(
     apply_collision_object_from_mesh_cli = node.create_client(ApplyCollisionObjectFromMesh,
                                                               'apply_collision_object_from_mesh')
     req = ApplyCollisionObjectFromMesh.Request()
-    req.resource_path = 'package://hello_moveit/cad/shelf_rev5/type1_slid_shelf_change_1.STL'
+    req.resource_path = 'package://hello_moveit/cad/shelf_rev5/org_rev4_Ass_slid_shelf_0801.STL'
     req.object_id = 'shelf'
     req.scale = 0.001
     obj_pose = Pose()

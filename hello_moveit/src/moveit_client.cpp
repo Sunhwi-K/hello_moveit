@@ -21,11 +21,19 @@
 #include <fstream>
 #include <sstream>
 #include <chrono>
+#include <geometry_msgs/msg/pose.hpp>
 
 
 using moveit::planning_interface::MoveGroupInterface;
 using namespace std::chrono_literals;
 namespace rvt = rviz_visual_tools;
+
+#define TEXT_POSITION_X 0.0
+#define TEXT_POSITION_Y 0.0
+#define TEXT_POSITION_Z 1.2
+
+#define MAX_PLANNING_TIME_SEC 10.0
+#define MAX_NUM_RETRY 3
 
 class MoveitClient
 {
@@ -135,11 +143,12 @@ public:
     move_group_.setMaxVelocityScalingFactor(request->velocity_scale);
     move_group_.setMaxAccelerationScalingFactor(request->acceleration_scale);
     move_group_.setNumPlanningAttempts(request->num_planning_attempts);
+    move_group_.setPlanningTime(MAX_PLANNING_TIME_SEC);
     findClosestSolution_(seed_state, solution);
     for (size_t i = 0; i < solution.size(); ++i) {
       RCLCPP_INFO_STREAM(logger_, "q[" << i << "]=" << solution[i]);
     }
-    respons->err_code = planExecuteJointValue_(solution, 1, request->verbose);
+    respons->err_code = planExecuteJointValue_(solution, MAX_NUM_RETRY, request->verbose);
     RCLCPP_INFO(logger_, "service is retrun");
   }
 
@@ -346,6 +355,10 @@ private:
         err = move_group_.plan(plan);
         if (err.val == moveit::core::MoveItErrorCode::SUCCESS) {
           if (verbose) {
+            //
+            iter_verbose_called_++;
+            //
+            visual_tools_.deleteAllMarkers();
             // Convert from moveit_msgs::msg::RobotTrajectory to robot_trajectory::RobotTrajectory
             moveit::core::RobotModelConstPtr rm = move_group_.getRobotModel();
             moveit::core::RobotState rs(rm);
@@ -358,6 +371,20 @@ private:
             std::cout << "Planning time: " << planning_time << "(sec)" << std::endl;
             log_file_ << planned_path_length << ',' << planning_time << std::endl;
 
+            // Visualize planned information as text
+            geometry_msgs::msg::Pose pose;
+            std::string label;
+            pose.position.x = TEXT_POSITION_X;
+            pose.position.y = TEXT_POSITION_Y;
+            pose.position.z = TEXT_POSITION_Z;
+            pose.orientation.w = 1.0;
+            label = "Pick&Place:\tIter." + std::to_string(iter_verbose_called_)
+                  + "\n"
+                  + "\tPlannedPathLength:\t" + std::to_string(planned_path_length) + "(rad)"
+                  + "\n"
+                  + "\tElapsedTimeToPlan:\t" + std::to_string(planning_time) + "(sec)";
+            visual_tools_.publishText(pose, label, rvt::BLACK, rvt::XXLARGE, false);
+
             // Get the parent link of the end effector
             const moveit::core::LinkModel* ee_parent_link;
             const std::vector<const moveit::core::LinkModel*> & link_models = joint_model_group_->getLinkModels();
@@ -367,11 +394,29 @@ private:
               }
             }
             // Visualize the planned path of the end effector
-            // visual_tools_.deleteAllMarkers();
             bool vis_err = visual_tools_.publishTrajectoryLine(rt, ee_parent_link);
             if (!vis_err) {
               RCLCPP_ERROR_STREAM(logger_, "visual_tools error");
             }
+            //
+            moveit::core::RobotState first_rs = rt.getFirstWayPoint();
+            auto start_affine = first_rs.getGlobalLinkTransform("wrist_3_link");
+            Eigen::Vector3d start_pos = start_affine.translation();
+            pose.position.x = start_pos.x();
+            pose.position.y = start_pos.y();
+            pose.position.z = start_pos.z() + 0.1;
+            pose.orientation.w = 1.0;
+            visual_tools_.publishText(pose, "Start", rvt::RED, rvt::XXLARGE, false);
+            //
+            moveit::core::RobotState last_rs = rt.getLastWayPoint();
+            auto last_affine = last_rs.getGlobalLinkTransform("wrist_3_link");
+            Eigen::Vector3d last_pos = last_affine.translation();
+            pose.position.x = last_pos.x();
+            pose.position.y = last_pos.y();
+            pose.position.z = last_pos.z() + 0.1;
+            pose.orientation.w = 1.0;
+            visual_tools_.publishText(pose, "Goal", rvt::RED, rvt::XXLARGE, false);
+            //
             visual_tools_.trigger();
           }
 
@@ -442,6 +487,7 @@ private:
   std::vector<moveit::core::VariableBounds> joint_bonds_;
   moveit::planning_interface::PlanningSceneInterface planning_scene_interface_;
   std::ofstream & log_file_;
+  uint8_t iter_verbose_called_ = 0;
 
   rclcpp::Service<hello_moveit_msgs::srv::PlanExecutePoses>::SharedPtr
     plan_execute_poses_srv_;

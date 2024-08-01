@@ -172,8 +172,8 @@ Visualization Manager:
       Robot Description: robot_description
       Scene Geometry:
         Scene Alpha: 0.8999999761581421
-        Scene Color: 175; 175; 175
-        Scene Display Time: 0.02
+        Scene Color: 200; 200; 200
+        Scene Display Time: 0.200
         Show Scene Geometry: true
         Voxel Coloring: Z-Axis
         Voxel Rendering: Occupied Voxels
@@ -463,10 +463,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.1704
+      Pitch: 0.3854
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 5.5232
+      Yaw: 5.4782
     Saved: ~
 Window Geometry:
   Displays:
