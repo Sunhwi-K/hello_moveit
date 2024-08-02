@@ -10,11 +10,14 @@
 #include <tf2_eigen/tf2_eigen.hpp>
 
 #include <hello_moveit_msgs/msg/collision_pair.hpp>
+#include <hello_moveit_msgs/srv/apply_attached_collision_object.hpp>
 #include <hello_moveit_msgs/srv/apply_collision_object.hpp>
 #include <hello_moveit_msgs/srv/apply_collision_object_from_mesh.hpp>
 #include <hello_moveit_msgs/srv/attach_hand.hpp>
 #include <hello_moveit_msgs/srv/check_collision.hpp>
 #include <hello_moveit_msgs/srv/detach_hand.hpp>
+#include <hello_moveit_msgs/srv/get_objects.hpp>
+#include <hello_moveit_msgs/srv/get_object_poses.hpp>
 #include <hello_moveit_msgs/srv/plan_execute_poses.hpp>
 #include <hello_moveit_msgs/srv/plan_execute_cartesian_path.hpp>
 
@@ -33,7 +36,7 @@ namespace rvt = rviz_visual_tools;
 #define TEXT_POSITION_Z 1.2
 
 #define MAX_PLANNING_TIME_SEC 10.0
-#define MAX_NUM_RETRY 3
+#define MAX_NUM_RETRY 10
 
 class MoveitClient
 {
@@ -80,6 +83,12 @@ public:
         &MoveitClient::planExecuteCartesianPathCB, this, std::placeholders::_1,
         std::placeholders::_2));
 
+    apply_attached_collision_object_srv_ = node_->create_service<hello_moveit_msgs::srv::ApplyAttachedCollisionObject>(
+      "apply_attached_collision_object",
+      std::bind(
+        &MoveitClient::applyAttachedCollisionObjectCB, this, std::placeholders::_1,
+        std::placeholders::_2));
+
     apply_collision_object_srv_ = node_->create_service<hello_moveit_msgs::srv::ApplyCollisionObject>(
       "apply_collision_object",
       std::bind(
@@ -110,6 +119,18 @@ public:
       "detach_hand",
       std::bind(
         &MoveitClient::detachHandCB, this, std::placeholders::_1,
+        std::placeholders::_2));
+
+    get_objects_srv_ = node_->create_service<hello_moveit_msgs::srv::GetObjects>(
+      "get_objects",
+      std::bind(
+        &MoveitClient::getObjectsCB, this, std::placeholders::_1,
+        std::placeholders::_2));
+
+    get_object_poses_srv_ = node_->create_service<hello_moveit_msgs::srv::GetObjectPoses>(
+      "get_object_poses",
+      std::bind(
+        &MoveitClient::getObjectPosesCB, this, std::placeholders::_1,
         std::placeholders::_2));
 
     current_state_ = move_group_.getCurrentState(3);
@@ -161,6 +182,27 @@ public:
     respons->is_success = planExecuteCartesianPath_(request->poses);
   }
 
+  void applyAttachedCollisionObjectCB(
+    const std::shared_ptr<hello_moveit_msgs::srv::ApplyAttachedCollisionObject::Request> request,
+    std::shared_ptr<hello_moveit_msgs::srv::ApplyAttachedCollisionObject::Response> respons)
+  {
+    // attach to planning_scene
+    auto acobj = request->acobj;
+    respons->is_success = planning_scene_interface_.applyAttachedCollisionObject(acobj);
+
+    // attach to current_state
+    std::vector<shapes::ShapeConstPtr> shapes;
+    shapes::ShapePtr shape_ptr(shapes::constructShapeFromMsg(acobj.object.meshes[0]));
+    shapes.push_back(shape_ptr);
+    Eigen::Isometry3d zero_pose(Eigen::Isometry3d::Identity());
+    auto shape_pose = convertPoseToIsometry3d_(acobj.object.pose);
+    EigenSTL::vector_Isometry3d shape_poses;
+    shape_poses.push_back(shape_pose);
+    current_state_->attachBody(
+      acobj.object.id, zero_pose, shapes, shape_poses,
+      acobj.touch_links, acobj.link_name);
+  }
+
   void applyCollisionObjectCB(
     const std::shared_ptr<hello_moveit_msgs::srv::ApplyCollisionObject::Request> request,
     std::shared_ptr<hello_moveit_msgs::srv::ApplyCollisionObject::Response> respons)
@@ -175,7 +217,6 @@ public:
     auto ps = moveit_msgs::msg::PlanningScene();
     ps.world = psw;
     ps.is_diff = true;
-    //planning_scene.setPlanningSceneMsg(ps);
     planning_scene_.setPlanningSceneDiffMsg(ps);
   }
 
@@ -191,9 +232,14 @@ public:
     } else {
       object.header.frame_id = request->frame_id;
     }
-
-    rclcpp::sleep_for(500ms);
     respons->is_success = planning_scene_interface_.applyCollisionObject(object);
+
+    moveit_msgs::msg::PlanningSceneWorld psw;
+    psw.collision_objects.push_back(object);
+    auto ps = moveit_msgs::msg::PlanningScene();
+    ps.world = psw;
+    ps.is_diff = true;
+    planning_scene_.setPlanningSceneDiffMsg(ps);
   }
 
   void attachHandCB(
@@ -285,6 +331,26 @@ public:
       respons->is_success = current_state_->clearAttachedBody(request->object_id);
     } else {
       respons->is_success = false;
+    }
+  }
+
+  void getObjectsCB(
+    const std::shared_ptr<hello_moveit_msgs::srv::GetObjects::Request> request,
+    std::shared_ptr<hello_moveit_msgs::srv::GetObjects::Response> respons)
+  {
+    auto rsp = planning_scene_interface_.getObjects(request->object_ids);
+    for (auto object_id : request->object_ids) {
+      respons->objects.push_back(rsp[object_id]);
+    }
+  }
+
+  void getObjectPosesCB(
+    const std::shared_ptr<hello_moveit_msgs::srv::GetObjectPoses::Request> request,
+    std::shared_ptr<hello_moveit_msgs::srv::GetObjectPoses::Response> respons)
+  {
+    auto rsp = planning_scene_interface_.getObjectPoses(request->object_ids);
+    for (auto object_id : request->object_ids) {
+      respons->poses.push_back(rsp[object_id]);
     }
   }
 
@@ -495,6 +561,9 @@ private:
   rclcpp::Service<hello_moveit_msgs::srv::PlanExecuteCartesianPath>::SharedPtr
     plan_execute_cartesian_path_srv_;
 
+  rclcpp::Service<hello_moveit_msgs::srv::ApplyAttachedCollisionObject>::SharedPtr
+    apply_attached_collision_object_srv_;
+
   rclcpp::Service<hello_moveit_msgs::srv::ApplyCollisionObject>::SharedPtr
     apply_collision_object_srv_;
 
@@ -509,6 +578,12 @@ private:
 
   rclcpp::Service<hello_moveit_msgs::srv::DetachHand>::SharedPtr
     detach_hand_srv_;
+
+  rclcpp::Service<hello_moveit_msgs::srv::GetObjects>::SharedPtr
+    get_objects_srv_;
+
+  rclcpp::Service<hello_moveit_msgs::srv::GetObjectPoses>::SharedPtr
+    get_object_poses_srv_;
 };
 
 

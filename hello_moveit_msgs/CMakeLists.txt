@@ -27,11 +27,14 @@ endif()
 find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/CollisionPair.msg"
+  "srv/ApplyAttachedCollisionObject.srv"
   "srv/ApplyCollisionObject.srv"
   "srv/ApplyCollisionObjectFromMesh.srv"
   "srv/AttachHand.srv"
   "srv/CheckCollision.srv"
   "srv/DetachHand.srv"
+  "srv/GetObjects.srv"
+  "srv/GetObjectPoses.srv"
   "srv/PlanExecuteCartesianPath.srv"
   "srv/PlanExecutePoses.srv"
   DEPENDENCIES builtin_interfaces geometry_msgs moveit_msgs sensor_msgs std_msgs

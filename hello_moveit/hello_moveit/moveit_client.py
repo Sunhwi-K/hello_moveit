@@ -5,7 +5,8 @@ from typing import List, Optional
 
 import rclpy
 from geometry_msgs.msg import Pose, PoseStamped
-from moveit_msgs.msg import CollisionObject, MoveItErrorCodes
+from moveit_msgs.msg import (AttachedCollisionObject, CollisionObject,
+                             MoveItErrorCodes)
 from moveit_msgs.srv import GetPositionFK, GetPositionIK
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
@@ -13,15 +14,49 @@ from shape_msgs.msg import SolidPrimitive
 from std_msgs.msg import Byte, Int32
 
 from hello_moveit_msgs.msg import CollisionPair
-from hello_moveit_msgs.srv import (ApplyCollisionObject,
+from hello_moveit_msgs.srv import (ApplyAttachedCollisionObject,
+                                   ApplyCollisionObject,
                                    ApplyCollisionObjectFromMesh, AttachHand,
-                                   CheckCollision, DetachHand,
-                                   PlanExecuteCartesianPath, PlanExecutePoses)
+                                   CheckCollision, DetachHand, GetObjectPoses,
+                                   GetObjects, PlanExecuteCartesianPath,
+                                   PlanExecutePoses)
 
+
+def apply_attached_collision_object(
+        node: Node,
+        acobj: AttachedCollisionObject) -> bool:
+    """
+    ROS service client for applying hand to tcp of the robot
+
+    Parameters
+    ----------
+    node: Node
+        Node which will receive server's responces
+
+    Returns
+    -------
+    ret_code: bool
+        Result of calling ROS service
+    """
+    apply_attached_collision_object_cli = node.create_client(ApplyAttachedCollisionObject, 'apply_attached_collision_object')
+    req = ApplyAttachedCollisionObject.Request()
+    req.acobj = acobj
+
+    while not apply_attached_collision_object_cli.wait_for_service(timeout_sec=1.0):
+        node.get_logger().info('apply attached collision object service not ready, sleep 1sec')
+    future = apply_attached_collision_object_cli.call_async(req)
+    rclpy.spin_until_future_complete(node, future)
+    ret_code = future.result().is_success
+    if ret_code is not True:
+        node.get_logger().error('apply attached collision object fail!!')
+    else:
+        node.get_logger().info('success!')
+    return ret_code
 
 def apply_collision_object(
         node: Node,
-        operation: Byte = CollisionObject.ADD) -> bool:
+        operation: Byte = CollisionObject.ADD,
+        collision_object: Optional[CollisionObject] = None) -> bool:
     """
     ROS service client for applying object to the planning scene
 
@@ -39,26 +74,31 @@ def apply_collision_object(
     """
     apply_collision_object_cli = node.create_client(ApplyCollisionObject,
                                                     'apply_collision_object')
-    obj = CollisionObject()
-    obj.id = 'wall'
-    obj.operation = operation
-    sp = SolidPrimitive()
-    sp.type = SolidPrimitive.BOX
-    sp.dimensions = [0.0] * 3
-    sp.dimensions[SolidPrimitive.BOX_X] = 0.1
-    sp.dimensions[SolidPrimitive.BOX_Y] = 1.0
-    sp.dimensions[SolidPrimitive.BOX_Z] = 1.0
-    obj.primitives.append(sp)
+    
+    if collision_object is None:
+        obj = CollisionObject()
+        obj.id = 'wall'
+        obj.operation = operation
+        sp = SolidPrimitive()
+        sp.type = SolidPrimitive.BOX
+        sp.dimensions = [0.0] * 3
+        sp.dimensions[SolidPrimitive.BOX_X] = 0.1
+        sp.dimensions[SolidPrimitive.BOX_Y] = 1.0
+        sp.dimensions[SolidPrimitive.BOX_Z] = 1.0
+        obj.primitives.append(sp)
 
-    obj_pose = Pose()
-    obj_pose.orientation.w = 1.0
-    obj_pose.orientation.x = 0.0
-    obj_pose.orientation.y = 0.0
-    obj_pose.orientation.z = 0.0
-    obj_pose.position.x = 0.3
-    obj_pose.position.y = 0.0
-    obj_pose.position.z = 0.5
-    obj.primitive_poses.append(obj_pose)
+        obj_pose = Pose()
+        obj_pose.orientation.w = 1.0
+        obj_pose.orientation.x = 0.0
+        obj_pose.orientation.y = 0.0
+        obj_pose.orientation.z = 0.0
+        obj_pose.position.x = 0.3
+        obj_pose.position.y = 0.0
+        obj_pose.position.z = 0.5
+        obj.primitive_poses.append(obj_pose)
+    else:
+        obj = collision_object
+
     req = ApplyCollisionObject.Request()
     req.object = obj
     while not apply_collision_object_cli.wait_for_service(timeout_sec=1.0):
@@ -219,6 +259,64 @@ def detach_hand(node: Node) -> bool:
     else:
         node.get_logger().info('success!')
     return ret_code
+
+def get_objects(
+        node: Node,
+        object_ids: List[str]) -> List[CollisionObject]:
+    """
+    ROS service client for getting the poses of the objects
+
+    Parameters
+    ----------
+    node: Node
+        Node which will receive server's responces
+    object_ids: List[str]
+        List of object names which you want to know the poses
+
+    Returns
+    -------
+    objects: List[CollisionObject]
+        List of collition objects
+    """
+    get_objects_cli = node.create_client(GetObjects, 'get_objects')
+    req = GetObjects.Request()
+    req.object_ids = object_ids
+
+    while not get_objects_cli.wait_for_service(timeout_sec=1.0):
+        node.get_logger().info('get objects service not ready, sleep 1sec')
+    future = get_objects_cli.call_async(req)
+    rclpy.spin_until_future_complete(node, future)
+    objects = future.result().objects
+    return objects
+
+def get_object_poses(
+        node: Node,
+        object_ids: List[str]) -> List[Pose]:
+    """
+    ROS service client for getting the poses of the objects
+
+    Parameters
+    ----------
+    node: Node
+        Node which will receive server's responces
+    object_ids: List[str]
+        List of object names which you want to know the poses
+
+    Returns
+    -------
+    object_poses: List[Pose]
+        List of poses of the objects
+    """
+    get_object_poses_cli = node.create_client(GetObjectPoses, 'get_object_poses')
+    req = GetObjectPoses.Request()
+    req.object_ids = object_ids
+
+    while not get_object_poses_cli.wait_for_service(timeout_sec=1.0):
+        node.get_logger().info('get object poses service not ready, sleep 1sec')
+    future = get_object_poses_cli.call_async(req)
+    rclpy.spin_until_future_complete(node, future)
+    poses = future.result().poses
+    return poses
 
 def plan_execute_poses(
         node: Node,
