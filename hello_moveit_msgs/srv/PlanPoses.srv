@@ -1,0 +1,13 @@
+sensor_msgs/JointState start_js
+geometry_msgs/Pose last_pose
+moveit_msgs/AttachedCollisionObject acobj
+float32 velocity_scale
+float32 acceleration_scale
+float64 planning_time
+uint32 num_planning_attempts
+uint32 num_retry
+bool verbose
+bool delete_markers
+---
+moveit_msgs/MoveItErrorCodes err_code
+hello_moveit_msgs/PlannedPath plan

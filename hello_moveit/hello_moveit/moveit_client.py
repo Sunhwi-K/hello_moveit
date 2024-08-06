@@ -1,25 +1,28 @@
 """
 Sample script to run Moveit clients
 """
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import rclpy
 from geometry_msgs.msg import Pose, PoseStamped
+# from moveit_msgs.action import ExecuteTrajectory
 from moveit_msgs.msg import (AttachedCollisionObject, CollisionObject,
-                             MoveItErrorCodes)
+                             MoveItErrorCodes, RobotTrajectory)
 from moveit_msgs.srv import GetPositionFK, GetPositionIK
+# from rclpy.action import ActionClient
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from shape_msgs.msg import SolidPrimitive
 from std_msgs.msg import Byte, Int32
 
-from hello_moveit_msgs.msg import CollisionPair
+from hello_moveit_msgs.msg import CollisionPair, PlannedPath
 from hello_moveit_msgs.srv import (ApplyAttachedCollisionObject,
                                    ApplyCollisionObject,
                                    ApplyCollisionObjectFromMesh, AttachHand,
-                                   CheckCollision, DetachHand, GetObjectPoses,
+                                   CheckCollision, DetachHand,
+                                   ExecuteTrajectory, GetObjectPoses,
                                    GetObjects, PlanExecuteCartesianPath,
-                                   PlanExecutePoses)
+                                   PlanExecutePoses, PlanPoses)
 
 
 def apply_attached_collision_object(
@@ -82,9 +85,9 @@ def apply_collision_object(
         sp = SolidPrimitive()
         sp.type = SolidPrimitive.BOX
         sp.dimensions = [0.0] * 3
-        sp.dimensions[SolidPrimitive.BOX_X] = 0.1
+        sp.dimensions[SolidPrimitive.BOX_X] = 0.01
         sp.dimensions[SolidPrimitive.BOX_Y] = 1.0
-        sp.dimensions[SolidPrimitive.BOX_Z] = 1.0
+        sp.dimensions[SolidPrimitive.BOX_Z] = 1.5
         obj.primitives.append(sp)
 
         obj_pose = Pose()
@@ -92,9 +95,9 @@ def apply_collision_object(
         obj_pose.orientation.x = 0.0
         obj_pose.orientation.y = 0.0
         obj_pose.orientation.z = 0.0
-        obj_pose.position.x = 0.3
+        obj_pose.position.x = 0.45
         obj_pose.position.y = 0.0
-        obj_pose.position.z = 0.5
+        obj_pose.position.z = 0.0
         obj.primitive_poses.append(obj_pose)
     else:
         obj = collision_object
@@ -260,6 +263,64 @@ def detach_hand(node: Node) -> bool:
         node.get_logger().info('success!')
     return ret_code
 
+# def execute_trajectory(node: Node, trajectory: RobotTrajectory) -> Int32:
+#     """
+#     ROS service client for executing the planned trajectory
+    
+#     Parameters
+#     ----------
+#     node: Node
+#         Node which will receive server's responces
+#     trajectory: RobotTrajectory
+#         Trajectory which you want to execute
+        
+#     Returns
+#     -------
+#     ret_code: Int32
+#         Result of calling ROS service
+#     """
+#     execute_trajectory_cli = node.create_client(ExecuteTrajectory, 'execute_trajectory')
+#     req = ExecuteTrajectory.Request()
+#     req.trajectory = trajectory
+
+#     while not execute_trajectory_cli.wait_for_service(timeout_sec=1.0):
+#         node.get_logger().info('detach hand service not ready, sleep 1sec')
+#     future = execute_trajectory_cli.call_async(req)
+#     rclpy.spin_until_future_complete(node, future)
+#     ret_code = future.result().err_code.val
+#     if ret_code is not MoveItErrorCodes.SUCCESS:
+#         node.get_logger().error('execute trajectory fail!!')
+#     else:
+#         node.get_logger().info('success!')
+#     return ret_code
+    # execute_trajectory_cli = ActionClient(
+    #     node=node,
+    #     action_type=ExecuteTrajectory,
+    #     action_name='execute_trajectory')
+
+    # while not execute_trajectory_cli.wait_for_server(timeout_sec=1.0):
+    #     node.get_logger().info('execute_trajectory service not ready, sleep 1sec')
+
+    # req = ExecuteTrajectory.Goal()
+    # req.trajectory = trajectory
+    # send_goal_future = execute_trajectory_cli.send_goal_async(
+    #     goal=req)
+    # rclpy.spin_until_future_complete(
+    #     node=node,
+    #     future=send_goal_future)
+    # goal_handle = send_goal_future.result()
+
+    # if not goal_handle.accepted:
+    #     node.get_logger().error('fail to send goal')
+    #     return MoveItErrorCodes.FAILURE
+    # else:
+    #     node.get_logger().info('success to send goal!')
+    #     get_result_future = goal_handle.get_result_async()
+    #     rclpy.spin_until_future_complete(
+    #         node=node,
+    #         future=get_result_future)
+    #     return get_result_future.result().result.error_code.val
+
 def get_objects(
         node: Node,
         object_ids: List[str]) -> List[CollisionObject]:
@@ -398,6 +459,67 @@ def plan_execute_cartesian_path(
     else:
         node.get_logger().info('success!')
     return ret_code
+
+# def plan_poses(
+#         node: Node,
+#         last_pose: Pose,
+#         start_js: Optional[JointState] = None,
+#         acobj: Optional[AttachedCollisionObject] = None,
+#         planning_time: float = 10.0,
+#         num_planning_attempts: int = 1,
+#         num_retry: int = 1,
+#         verbose: bool = False,
+#         delete_markers: bool = False) -> Tuple[Int32, Optional[PlannedPath]]:
+#     """
+#     ROS service client for planning to achieve the target pose of tcp
+
+#     Parameters
+#     ----------
+#     node: Node
+#         Node which will receive server's responces
+#     pose: Pose
+#         Target tcp pose
+
+#     Returns
+#     -------
+#     ret_code: Int32
+#         Result of calling ROS service
+#     """
+#     if num_planning_attempts < 1:
+#         node.get_logger().error('num_planning_attempts must be greater than 0')
+#         return MoveItErrorCodes.FAILURE
+
+#     plan_poses_cli = node.create_client(PlanPoses, 'plan_poses')
+#     req = PlanPoses.Request()
+#     if start_js:
+#         req.start_js = start_js
+#     else:
+#         req.start_js = JointState()
+#     req.last_pose = last_pose
+#     if acobj:
+#         req.acobj = acobj
+#     else:
+#         req.acobj = AttachedCollisionObject()
+#     req.velocity_scale = 0.2  # you can chage this to slow down robot
+#     req.acceleration_scale = 0.2  # you can chage this to slow down robot
+#     req.planning_time = planning_time
+#     req.num_planning_attempts = num_planning_attempts
+#     req.num_retry = num_retry
+#     req.verbose = verbose
+#     req.delete_markers = delete_markers
+
+#     while not plan_poses_cli.wait_for_service(timeout_sec=1.0):
+#         node.get_logger().info('service not ready, sleep 1sec')
+
+#     future = plan_poses_cli.call_async(req)
+#     rclpy.spin_until_future_complete(node, future)
+#     ret_code = future.result().err_code.val
+#     if ret_code is not MoveItErrorCodes.SUCCESS:
+#         node.get_logger().error(f'fail!!MoveItErrorCode: {future.result().err_code.val}')
+#         return ret_code, None
+#     else:
+#         node.get_logger().info('success!')
+#         return ret_code, future.result().plan
 
 def compute_fk(
     node: Node,

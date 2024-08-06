@@ -10,16 +10,19 @@
 #include <tf2_eigen/tf2_eigen.hpp>
 
 #include <hello_moveit_msgs/msg/collision_pair.hpp>
+#include <hello_moveit_msgs/msg/planned_path.hpp>
 #include <hello_moveit_msgs/srv/apply_attached_collision_object.hpp>
 #include <hello_moveit_msgs/srv/apply_collision_object.hpp>
 #include <hello_moveit_msgs/srv/apply_collision_object_from_mesh.hpp>
 #include <hello_moveit_msgs/srv/attach_hand.hpp>
 #include <hello_moveit_msgs/srv/check_collision.hpp>
 #include <hello_moveit_msgs/srv/detach_hand.hpp>
+#include <hello_moveit_msgs/srv/execute_trajectory.hpp>
 #include <hello_moveit_msgs/srv/get_objects.hpp>
 #include <hello_moveit_msgs/srv/get_object_poses.hpp>
 #include <hello_moveit_msgs/srv/plan_execute_poses.hpp>
 #include <hello_moveit_msgs/srv/plan_execute_cartesian_path.hpp>
+#include <hello_moveit_msgs/srv/plan_poses.hpp>
 
 #include <fstream>
 #include <sstream>
@@ -36,7 +39,7 @@ namespace rvt = rviz_visual_tools;
 #define TEXT_POSITION_Z 1.2
 
 #define MAX_PLANNING_TIME_SEC 10.0
-#define MAX_NUM_RETRY 10
+#define MAX_NUM_RETRY 20
 
 class MoveitClient
 {
@@ -83,6 +86,12 @@ public:
         &MoveitClient::planExecuteCartesianPathCB, this, std::placeholders::_1,
         std::placeholders::_2));
 
+    plan_poses_srv_ = node_->create_service<hello_moveit_msgs::srv::PlanPoses>(
+      "plan_poses",
+      std::bind(
+        &MoveitClient::planPosesCB, this, std::placeholders::_1,
+        std::placeholders::_2));
+
     apply_attached_collision_object_srv_ = node_->create_service<hello_moveit_msgs::srv::ApplyAttachedCollisionObject>(
       "apply_attached_collision_object",
       std::bind(
@@ -114,11 +123,16 @@ public:
         &MoveitClient::checkCollisionCB, this, std::placeholders::_1,
         std::placeholders::_2));
 
-
     detach_hand_srv_ = node_->create_service<hello_moveit_msgs::srv::DetachHand>(
       "detach_hand",
       std::bind(
         &MoveitClient::detachHandCB, this, std::placeholders::_1,
+        std::placeholders::_2));
+
+    execute_trajectory_srv_ = node_->create_service<hello_moveit_msgs::srv::ExecuteTrajectory>(
+      "execute_trajectory",
+      std::bind(
+        &MoveitClient::executeTrajectoryCB, this, std::placeholders::_1,
         std::placeholders::_2));
 
     get_objects_srv_ = node_->create_service<hello_moveit_msgs::srv::GetObjects>(
@@ -161,6 +175,8 @@ public:
       return;
     }
 
+    move_group_.setStartStateToCurrentState();
+    move_group_.allowReplanning(false);
     move_group_.setMaxVelocityScalingFactor(request->velocity_scale);
     move_group_.setMaxAccelerationScalingFactor(request->acceleration_scale);
     move_group_.setNumPlanningAttempts(request->num_planning_attempts);
@@ -177,9 +193,72 @@ public:
     const std::shared_ptr<hello_moveit_msgs::srv::PlanExecuteCartesianPath::Request> request,
     std::shared_ptr<hello_moveit_msgs::srv::PlanExecuteCartesianPath::Response> respons)
   {
+    move_group_.setStartStateToCurrentState();
+    move_group_.allowReplanning(false);
     move_group_.setMaxVelocityScalingFactor(request->velocity_scale);
     move_group_.setMaxAccelerationScalingFactor(request->acceleration_scale);
     respons->is_success = planExecuteCartesianPath_(request->poses);
+  }
+
+  void planPosesCB(
+    const std::shared_ptr<hello_moveit_msgs::srv::PlanPoses::Request> request,
+    std::shared_ptr<hello_moveit_msgs::srv::PlanPoses::Response> respons)
+  {
+    std::vector<double> seed_state;
+    if (request->start_js.name.size() > 0) { // use argument joint state
+      // create map from joint name to joint value
+      std::map<std::string, double> joint_values;
+      for (size_t i = 0; i < request->start_js.name.size(); ++i) {
+        joint_values[request->start_js.name[i]] = request->start_js.position[i];
+      }
+      // sort joint values by joint_model_group_ order
+      for (const auto & name : joint_model_group_->getActiveJointModelNames()) {
+        seed_state.push_back(joint_values[name]);
+      }
+    } else { // use current joint state
+      current_state_->copyJointGroupPositions(joint_model_group_, seed_state);
+    }
+    // compute IK for target pose
+    const auto & target_pose = request->last_pose;
+    std::vector<double> solution;
+    ik_solver_->getPositionIK(target_pose, seed_state, solution, respons->err_code);
+    // check IK result
+    if (respons->err_code.val != moveit_msgs::msg::MoveItErrorCodes::SUCCESS) {
+      RCLCPP_ERROR_STREAM(logger_, "IKERROR, errcode:" << respons->err_code.val);
+      return;
+    }
+    // construct start state
+    moveit::core::RobotState start_rs(*current_state_); // copy constructor
+    // if (request->start_js.name.size() > 0) {
+    start_rs.setVariableValues(request->start_js); // set joint values
+    // }
+    auto acobj = request->acobj;
+    if (acobj.object.meshes.size() > 0) { // attach object if exists
+      std::vector<shapes::ShapeConstPtr> shapes;
+      shapes::ShapePtr shape_ptr(shapes::constructShapeFromMsg(acobj.object.meshes[0]));
+      shapes.push_back(shape_ptr);
+      Eigen::Isometry3d zero_pose(Eigen::Isometry3d::Identity());
+      auto shape_pose = convertPoseToIsometry3d_(acobj.object.pose);
+      EigenSTL::vector_Isometry3d shape_poses;
+      shape_poses.push_back(shape_pose);
+      start_rs.attachBody(
+        acobj.object.id, zero_pose, shapes, shape_poses,
+        acobj.touch_links, acobj.link_name);
+    }
+    // set move_group_ parameters
+    move_group_.setStartState(start_rs);
+    move_group_.allowReplanning(true);
+    move_group_.setMaxVelocityScalingFactor(request->velocity_scale);
+    move_group_.setMaxAccelerationScalingFactor(request->acceleration_scale);
+    move_group_.setNumPlanningAttempts(request->num_planning_attempts);
+    move_group_.setPlanningTime(request->planning_time);
+    findClosestSolution_(seed_state, solution);
+    // plan path
+    if (request->delete_markers) {
+      visual_tools_.deleteAllMarkers();
+    }
+    respons->err_code = planJointValue_(solution, request->num_retry, request->verbose, respons->plan);
+    RCLCPP_INFO(logger_, "service is retrun");
   }
 
   void applyAttachedCollisionObjectCB(
@@ -332,6 +411,16 @@ public:
     } else {
       respons->is_success = false;
     }
+  }
+
+  void executeTrajectoryCB(
+    const std::shared_ptr<hello_moveit_msgs::srv::ExecuteTrajectory::Request> request,
+    std::shared_ptr<hello_moveit_msgs::srv::ExecuteTrajectory::Response> respons)
+  {
+    [&]()->void {
+      respons->err_code = move_group_.execute(request->trajectory);
+      RCLCPP_INFO(logger_, "service is retrun");
+    }();
   }
 
   void getObjectsCB(
@@ -541,6 +630,101 @@ private:
     return is_success;
   }
 
+  moveit::core::MoveItErrorCode planJointValue_(
+    const std::vector<double> & q,
+    const int retry,
+    bool verbose,
+    hello_moveit_msgs::msg::PlannedPath & plan_msg)
+  {
+    move_group_.setJointValueTarget(q);
+    moveit::planning_interface::MoveGroupInterface::Plan plan;
+    moveit::core::MoveItErrorCode err;
+
+    [&]()->void {
+      for (int i = retry; i > 0; i--) {
+        err = move_group_.plan(plan);
+        if (err.val == moveit::core::MoveItErrorCode::SUCCESS) {
+          if (verbose) {
+            //
+            // iter_verbose_called_++;
+            //
+            // visual_tools_.deleteAllMarkers();
+            // Convert from moveit_msgs::msg::RobotTrajectory to robot_trajectory::RobotTrajectory
+            moveit::core::RobotModelConstPtr rm = move_group_.getRobotModel();
+            moveit::core::RobotState rs(rm);
+            robot_trajectory::RobotTrajectory rt(rm, joint_model_group_);
+            rt.setRobotTrajectoryMsg(rs, plan.trajectory_);
+            // Get the length of the planned path
+            double planned_path_length = robot_trajectory::path_length(rt);
+            double planning_time = plan.planning_time_;
+            std::cout << "Path length: " << planned_path_length << "(rad)" << std::endl;
+            std::cout << "Planning time: " << planning_time << "(sec)" << std::endl;
+            log_file_ << planned_path_length << ',' << planning_time << std::endl;
+
+            // Visualize planned information as text
+            geometry_msgs::msg::Pose pose;
+            std::string label;
+
+            // pose.position.x = TEXT_POSITION_X;
+            // pose.position.y = TEXT_POSITION_Y;
+            // pose.position.z = TEXT_POSITION_Z;
+            // pose.orientation.w = 1.0;
+            // label = "Pick&Place:\tIter." + std::to_string(iter_verbose_called_)
+            //       + "\n"
+            //       + "\tPlannedPathLength:\t" + std::to_string(planned_path_length) + "(rad)"
+            //       + "\n"
+            //       + "\tElapsedTimeToPlan:\t" + std::to_string(planning_time) + "(sec)";
+            // visual_tools_.publishText(pose, label, rvt::BLACK, rvt::XXLARGE, false);
+
+            // Get the parent link of the end effector
+            const moveit::core::LinkModel* ee_parent_link;
+            const std::vector<const moveit::core::LinkModel*> & link_models = joint_model_group_->getLinkModels();
+            for (const moveit::core::LinkModel* link_model : link_models) {
+              if (link_model->getName() == "wrist_3_link") {
+                ee_parent_link = link_model;
+              }
+            }
+            // Visualize the planned path of the end effector
+            bool vis_err = visual_tools_.publishTrajectoryLine(rt, ee_parent_link);
+            if (!vis_err) {
+              RCLCPP_ERROR_STREAM(logger_, "visual_tools error");
+            }
+            //
+            moveit::core::RobotState first_rs = rt.getFirstWayPoint();
+            auto start_affine = first_rs.getGlobalLinkTransform("wrist_3_link");
+            Eigen::Vector3d start_pos = start_affine.translation();
+            pose.position.x = start_pos.x();
+            pose.position.y = start_pos.y();
+            pose.position.z = start_pos.z() + 0.1;
+            pose.orientation.w = 1.0;
+            visual_tools_.publishText(pose, "Start", rvt::RED, rvt::XXLARGE, false);
+            //
+            moveit::core::RobotState last_rs = rt.getLastWayPoint();
+            auto last_affine = last_rs.getGlobalLinkTransform("wrist_3_link");
+            Eigen::Vector3d last_pos = last_affine.translation();
+            pose.position.x = last_pos.x();
+            pose.position.y = last_pos.y();
+            pose.position.z = last_pos.z() + 0.1;
+            pose.orientation.w = 1.0;
+            visual_tools_.publishText(pose, "Goal", rvt::RED, rvt::XXLARGE, false);
+            //
+            visual_tools_.trigger();
+          }
+          // substitute planned path to response
+          plan_msg.planning_time = plan.planning_time_;
+          plan_msg.start_state = plan.start_state_;
+          plan_msg.trajectory = plan.trajectory_;
+
+          return;
+        }
+        RCLCPP_WARN_STREAM(logger_, "try to replan");
+      }
+      RCLCPP_ERROR_STREAM(logger_, "planning fail");
+    }();
+
+    return err;
+  }
+
   const std::string arm_group_;
   std::shared_ptr<rclcpp::Node> node_;
   MoveGroupInterface & move_group_;
@@ -561,6 +745,9 @@ private:
   rclcpp::Service<hello_moveit_msgs::srv::PlanExecuteCartesianPath>::SharedPtr
     plan_execute_cartesian_path_srv_;
 
+  rclcpp::Service<hello_moveit_msgs::srv::PlanPoses>::SharedPtr
+    plan_poses_srv_;
+
   rclcpp::Service<hello_moveit_msgs::srv::ApplyAttachedCollisionObject>::SharedPtr
     apply_attached_collision_object_srv_;
 
@@ -578,6 +765,9 @@ private:
 
   rclcpp::Service<hello_moveit_msgs::srv::DetachHand>::SharedPtr
     detach_hand_srv_;
+
+  rclcpp::Service<hello_moveit_msgs::srv::ExecuteTrajectory>::SharedPtr
+    execute_trajectory_srv_;
 
   rclcpp::Service<hello_moveit_msgs::srv::GetObjects>::SharedPtr
     get_objects_srv_;
